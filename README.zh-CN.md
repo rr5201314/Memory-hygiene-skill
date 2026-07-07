@@ -117,7 +117,7 @@ cp Memory-hygiene-skill/SKILL.md ~/.hermes/skills/hermes-agent/memory-hygiene/SK
 或通过 Hermes CLI：
 
 ```bash
-hermes skills install https://github.com/rr5201314/Memory-hygiene-skill
+hermes skills install https://raw.githubusercontent.com/rr5201314/Memory-hygiene-skill/main/SKILL.md
 ```
 
 ## 首次加载
