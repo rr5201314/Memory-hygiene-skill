@@ -1,140 +1,139 @@
-# Memory Hygiene — Hermes Agent 分层记忆架构 Skill
+# Memory Hygiene — Hermes Agent Layered Memory Architecture Skill
 
-> 解决 Hermes Agent 记忆系统的结构性问题：所有记忆平铺注入、没有按需加载、项目细节污染每轮上下文。
+> English | [中文](./README.zh-CN.md)
 
-## 痛点
+> Solves structural problems in Hermes Agent's memory system: flat injection of all memories, no on-demand loading, project details polluting every turn's context.
 
-Hermes 的记忆系统只有两层：`memory`（agent 笔记）和 `user`（用户信息），所有内容**每轮对话强制注入** system prompt。这带来三个问题：
+## Pain Points
 
-**1. 噪声污染**
+Hermes memory only has two layers: `memory` (agent notes) and `user` (user profile), all of which are **force-injected into every turn's system prompt**. This causes three problems:
 
-项目细节、工具 pitfall、环境配置这类只在特定场景才需要的信息，每轮都占 token。比如你有一个项目的数据编辑规范，但它在你写论文、查资料、调代码时全都注入了——白花 token，还干扰模型注意力。
+**1. Noise Pollution**
 
-**2. 没有"摘要 + 按需全文"机制**
+Project details, tool pitfalls, environment configs — information only needed in specific scenarios — consumes tokens every turn. For example, your project's data editing spec is injected when you're writing papers, browsing docs, or debugging code — wasted tokens that also distract the model.
 
-理想情况下，agent 应该只看到"你有这些项目和技能"的简短索引，需要时再加载详情。但 Hermes 的 memory 没有这个能力——要么全给，要么不给。
+**2. No "Summary + On-Demand Full Text" Mechanism**
 
-**3. 记忆膨胀不可控**
+Ideally, the agent should only see a short index of "you have these projects and skills", loading details on demand. But Hermes memory doesn't support this — it's all or nothing.
 
-任务进度、完成记录、临时发现不断堆积，4000 字符很快就满了。没有分层概念，用户不知道哪些该留、哪些该转、哪些该删。
+**3. Uncontrolled Memory Bloat**
 
-## 方案
+Task progress, completion records, temporary findings pile up constantly. The 4,000 character limit fills up fast. Without a layered concept, users don't know what to keep, what to move, or what to delete.
 
-利用 Hermes 现有机制做平替，把记忆分为三层：
+## Solution
 
-| 层级 | 职责 | 注入时机 | Hermes 实现 |
-|------|------|---------|------------|
-| **LV1** | 用户基本信息、人格、全局约束 | **每轮** system prompt | `memory`(target='memory' + 'user') + `SOUL.md` |
-| **LV2** | 项目上下文、用户详细信息、工具环境 | **按需** | Skill（description 做摘要） |
-| **LV3** | 操作流程、pitfall、工作流 | **按需** | Skill（同上） |
+Leverage Hermes's existing mechanisms as a workaround, splitting memory into three layers:
 
-**核心洞察**：`skills_list` 返回所有 skill 的 name + description，这天然就是 LV2/LV3 的"摘要索引"。agent 扫描 `skills_list` 后按需 `skill_view`，等价于"摘要注入 + 按需全文"。
+| Layer | Responsibility | Injection Timing | Hermes Implementation |
+|-------|---------------|------------------|----------------------|
+| **LV1** | User basic info, personality, global constraints | **Every turn** system prompt | `memory`(target='memory' + 'user') + `SOUL.md` |
+| **LV2** | Project context, user details, tool environment | **On demand** | Skill (description as summary) |
+| **LV3** | Procedures, pitfalls, workflows | **On demand** | Skill (same) |
 
-### 伪渐进式披露架构
+**Key Insight**: `skills_list` returns all skills' name + description, which naturally serves as LV2/LV3's "summary index". The agent scans `skills_list` then loads via `skill_view` on demand — equivalent to "summary injection + on-demand full text".
 
-Hermes 没有原生的"摘要注入 + 按需全文"机制，但 `skills_list` + `skill_view` 组合出了一套**伪渐进式披露**（pseudo-progressive disclosure）：
+### Pseudo-Progressive Disclosure Architecture
+
+Hermes has no native "summary injection + on-demand full text" mechanism, but `skills_list` + `skill_view` combine into a **pseudo-progressive disclosure** system:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    每轮 system prompt                   │
+│                    Every Turn's System Prompt          │
 │                                                         │
-│  LV1: memory + user + SOUL.md  ←  强制注入，始终在场     │
+│  LV1: memory + user + SOUL.md  ←  Always present       │
 │                                                         │
-│  skills_list 返回的索引（自动注入，零额外开销）：          │
+│  skills_list Index (auto-injected, zero extra cost):    │
 │  ┌───────────────────────────────────────────────────┐ │
 │  │ name: myapp-overview                              │ │
-│  │ desc: XXX 项目总览。了解项目背景、技术栈时加载。       │ │
+│  │ desc: Project overview. Load for background/stack. │ │
 │  ├───────────────────────────────────────────────────┤ │
 │  │ name: myapp-data-model                            │ │
-│  │ desc: 数据模型规范。编辑数据库 schema 时加载。        │ │
+│  │ desc: Data model spec. Load when editing schema.   │ │
 │  ├───────────────────────────────────────────────────┤ │
 │  │ name: tool-setup-pitfalls                         │ │
-│  │ desc: 某工具安装坑点。配置该工具时加载。              │ │
+│  │ desc: Tool setup pitfalls. Load when configuring.  │ │
 │  └───────────────────────────────────────────────────┘ │
 │                                                         │
-│  ↑ agent 扫描索引，根据当前任务语义判断是否需要加载 ↓     │
+│  ↑ Agent scans index, decides what to load by semantics │
 └─────────────────────────────────────────────────────┘
 
           ↓ skill_view(name="myapp-data-model") ↓
 
 ┌─────────────────────────────────────────────────────┐
-│              SKILL.md 全文（按需加载）                  │
+│              SKILL.md Full Text (on demand)             │
 │                                                         │
-│  数据模型规范                                           │
-│  ├── 用户表和订单表不能直接 JOIN                         │
-│  ├── 迁移脚本必须可回滚                                 │
-│  ├── 新增字段必须有默认值                                │
+│  Data Model Spec                                        │
+│  ├── Users and Orders tables must not be directly JOINed│
+│  ├── Migration scripts must be reversible               │
+│  ├── New columns must have default values               │
 │  └── ...                                                │
 └─────────────────────────────────────────────────────┘
 ```
 
-**为什么叫"伪"渐进式披露**：
+**Why "Pseudo" Progressive Disclosure**:
 
-真正的渐进式披露是 UI 层面的——用户点击才展开详情。Hermes 没有这个 UI，但效果等价：
+Real progressive disclosure is a UI pattern — users click to expand details. Hermes has no such UI, but the effect is equivalent:
 
-| 渐进式披露 | Hermes 对应 |
-|-----------|------------|
-| 第一层：摘要/索引 | `skills_list` 返回 name + description |
-| 第二层：详情 | `skill_view` 加载 SKILL.md 全文 |
-| 用户决定是否展开 | agent 根据任务语义决定是否 `skill_view` |
+| Progressive Disclosure | Hermes Equivalent |
+|----------------------|-------------------|
+| Layer 1: Summary/Index | `skills_list` returns name + description |
+| Layer 2: Full details | `skill_view` loads full SKILL.md |
+| User decides to expand | Agent decides by task semantics whether to `skill_view` |
 
-**代价**：agent 需要一次 `skills_list` 调用（返回所有 skill 的 name + description，约几百 token）。相比把所有项目细节塞进每轮 system prompt，这个代价可以忽略。
+**Cost**: One `skills_list` call (returns all skills' name + description, ~a few hundred tokens). Negligible compared to injecting all project details into every turn's system prompt.
 
-**效果**：agent 在新会话中只看到 LV1（全局约束）+ 索引（项目/技能摘要），真正需要时才加载全文。token 用在刀刃上。
+**Effect**: The agent only sees LV1 (global constraints) + index (project/skill summaries) at the start of a new session. Full content loads only when needed. Tokens spent where they matter.
 
-### LV1 示例
+### LV1 Example
 
 ```
-记忆架构分三层：LV1=memory/user/SOUL，LV2=项目和用户详情（skill的形式存放，
-description做记忆摘要，按需读取），LV3=流程技能（skill）。skill中的知识分两种：
-声明性（"是什么"，如项目背景、用户信息）和过程性（"怎么做"，如操作流程、pitfall）。
-任务前扫描 skills_list 决定加载哪些，不要盲目全加载。记忆架构和维护规范详见 memory-hygiene skill。
+Memory architecture has three layers: LV1=memory/user/SOUL, LV2=project and user details (stored as skills, description as summary, load on demand), LV3=procedural skills (skills). Skills contain two types of knowledge: declarative ("what is it", e.g. project background, user info) and procedural ("how to do it", e.g. workflows, pitfalls). Scan skills_list before tasks to decide what to load, don't load blindly. See memory-hygiene skill for architecture details.
 ```
 
-### LV2 示例（项目文件夹结构）
+### LV2 Example (Project Folder Structure)
 
 ```
 skills/{category}/
-├── {project}-overview/SKILL.md     → description: "XXX 项目总览。了解背景、技术栈时加载。"
-├── {project}-module-a/SKILL.md    → description: "模块 A 规范。编辑 XXX 时加载。"
-└── {project}-module-b/SKILL.md    → description: "模块 B 规则。写 YYY 时加载。"
+├── {project}-overview/SKILL.md     → description: "Project overview. Load for background, tech stack."
+├── {project}-module-a/SKILL.md    → description: "Module A spec. Load when editing XXX."
+└── {project}-module-b/SKILL.md    → description: "Module B rules. Load when writing YYY."
 ```
 
-## 安装
+## Installation
 
-将 `SKILL.md` 放入你的 Hermes skills 目录：
+Place `SKILL.md` into your Hermes skills directory:
 
 ```bash
-# 克隆仓库
+# Clone the repo
 git clone https://github.com/YOUR_USERNAME/memory-hygiene.git
 
-# 复制到 Hermes skills 目录
+# Copy to Hermes skills directory
 cp memory-hygiene/SKILL.md ~/.hermes/skills/hermes-agent/memory-hygiene/SKILL.md
 ```
 
-或通过 Hermes CLI：
+Or via Hermes CLI:
 
 ```bash
 hermes skills install https://github.com/YOUR_USERNAME/memory-hygiene
 ```
 
-## 首次加载
+## First Load
 
-本 skill 基于分层架构运作。**首次加载时**，agent 会检查 memory 中是否已包含架构声明。如果没有，会先写入，再执行后续操作。
+This skill operates on the layered architecture. **On first load**, the agent checks whether the architecture declaration exists in memory. If not, it writes it first before proceeding.
 
-## 包含内容
+## What's Included
 
-- **Skill 管理规范**：description 写法、去重规则、项目文件夹结构
-- **清理流程**：逐条审查 → 用户确认 → 批量执行
-- **7 条常见陷阱**：文本匹配、同步遗漏、膨胀控制等
-- **自检清单**：执行后对照检查
+- **Skill Management Rules**: description writing, dedup, project folder structure
+- **Cleanup Workflow**: per-item review → user confirmation → batch execution
+- **7 Common Pitfalls**: text matching, sync gaps, bloat control, etc.
+- **Self-Check Checklist**: post-operation verification
 
-## 适用场景
+## Use Cases
 
-- 记忆占用 > 80%，需要清理
-- 项目记忆混乱，需要按模块拆分
-- 新开项目，需要规划 skill 结构
-- 想让 agent 记忆更高效、减少 token 浪费
+- Memory usage > 80%, needs cleanup
+- Project memories are messy, need modular split
+- New project, need to plan skill structure
+- Want more efficient agent memory, reduce token waste
 
 ## License
 

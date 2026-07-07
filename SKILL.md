@@ -1,145 +1,147 @@
 ---
 name: memory-hygiene
-description: "记忆架构操作手册：清理记忆、迁移记忆到 skill、创建项目 skill、管理 skill 结构时加载。"
+description: "Memory architecture operations manual: load when cleaning memory, migrating to skills, creating project skills, or managing skill structure."
 tags: [memory, hygiene, hermes-agent, maintenance, architecture]
 ---
 
-# Memory Hygiene — 记忆架构操作手册
+# Memory Hygiene — Memory Architecture Operations Manual
 
-## ⚠️ 首次加载前置检查
+> English | [中文](./SKILL.zh-CN.md)
 
-本 skill 基于一套分层记忆架构运作。**执行本 skill 的任何操作前**，先检查 memory（target='memory'）中是否已包含以下架构声明：
+## ⚠️ Pre-Load Check
 
-> 记忆架构分三层：LV1=memory/user/SOUL，LV2=项目和用户详情（skill的形式存放，description做记忆摘要，按需读取），LV3=流程技能（skill）。skill中的知识分两种：声明性（"是什么"，如项目背景、用户信息）和过程性（"怎么做"，如操作流程、pitfall）。任务前扫描 skills_list 决定加载哪些，不要盲目全加载。记忆架构和维护规范详见 memory-hygiene skill。
+This skill operates on a layered memory architecture. **Before executing any operation**, check whether memory (target='memory') already contains the following architecture declaration:
 
-**如果 memory 中没有这段话**，在执行任何操作之前，先把这段话写入 memory。否则 agent 不知道分层架构的存在，本 skill 的规范无法生效。
+> Memory architecture has three layers: LV1=memory/user/SOUL, LV2=project and user details (stored as skills, description as summary, load on demand), LV3=procedural skills (skills). Skills contain two types of knowledge: declarative ("what is it", e.g. project background, user info) and procedural ("how to do it", e.g. workflows, pitfalls). Scan skills_list before tasks to decide what to load, don't load blindly. See memory-hygiene skill for architecture details.
 
----
-
-> 架构定义（LV1/LV2/LV3 是什么、怎么映射到 Hermes）在上述 LV1 记忆中，每轮注入，不在这里重复。
-> 本 skill 只写**怎么操作**和**有什么约束**。
+**If this text is missing from memory**, write it into memory before doing anything else. Otherwise the agent won't know about the layered architecture and this skill's rules won't take effect.
 
 ---
 
-## Skill 管理规范
+> Architecture definitions (what LV1/LV2/LV3 are, how they map to Hermes) live in the above LV1 memory entry, injected every turn, not repeated here.
+> This skill only covers **how to operate** and **what constraints apply**.
 
-### Description 写法规范
+---
 
-description 是 agent 决定是否加载的唯一依据，必须做到：
+## Skill Management Rules
 
-1. **语义可检索**：包含关键词，让 agent 能通过任务内容匹配到它
-2. **说明触发条件**：写明"什么时候该加载这个 skill"
-3. **简短**：一两句话，不要写成摘要文章
+### Description Writing
+
+The description is the only basis for the agent to decide whether to load a skill. It must:
+
+1. **Be semantically retrievable**: include keywords so the agent can match it by task content
+2. **State trigger conditions**: write clearly "when should this skill be loaded"
+3. **Be brief**: one or two sentences, not an abstract
 
 ```
-# 好的 description
-description: "XXX 项目开发坑点。编辑 YYY 数据、ZZZ 模块时加载。"
+# Good description
+description: "XXX project pitfalls. Load when editing YYY data or ZZZ module."
 
-# 差的 description
-description: "这个 skill 记录了关于 XXX 项目的一些注意事项和开发经验"
+# Bad description
+description: "This skill records some notes and development experiences about the XXX project"
 ```
 
-### 去重规则
+### Deduplication
 
-写入前必须 `skills_list` 查重。已有相关 skill → `patch` 追加，不新建。
+Before writing, check existing skills via `skills_list`. If a related skill exists, `patch` to append — don't create a new one.
 
-### 项目记忆的文件夹结构
+### Project Memory Folder Structure
 
-大型项目的 LV2 记忆不应挤在一个 skill 里，应拆成**一个 category 文件夹 + 多个子 skill**：
+Large projects' LV2 memory shouldn't be crammed into one skill. Split into **one category folder + multiple sub-skills**:
 
 ```
 skills/
-└── {category}/                    # 项目专属 category
-    ├── {project}-overview/        # 项目总览
-    │   └── SKILL.md              # 背景、技术栈、仓库地址、功能清单
-    ├── {project}-module-a/        # 模块 A
-    │   └── SKILL.md              # 模块介绍、约束、规则、坑点
-    ├── {project}-module-b/        # 模块 B
+└── {category}/                    # Project-specific category
+    ├── {project}-overview/        # Project overview
+    │   └── SKILL.md              # Background, tech stack, repo, feature list
+    ├── {project}-module-a/        # Module A
+    │   └── SKILL.md              # Module intro, constraints, rules, pitfalls
+    ├── {project}-module-b/        # Module B
     │   └── SKILL.md
     └── ...
 ```
 
-**示例：一个典型的 App 项目**
+**Example: A Typical App Project**
 
 ```
 skills/{category}/
-├── {project}-overview/SKILL.md        → description: "XXX 项目总览。了解项目背景、技术栈时加载。"
-├── {project}-module-a/SKILL.md       → description: "模块 A 开发规范。编辑 XXX 数据时加载。"
-├── {project}-module-b/SKILL.md       → description: "模块 B 开发规则。写 YYY 功能时加载。"
-└── {project}-integration/SKILL.md    → description: "XXX 集成方案。对接 YYY 服务时加载。"
+├── {project}-overview/SKILL.md        → description: "Project overview. Load for background, tech stack."
+├── {project}-module-a/SKILL.md       → description: "Module A spec. Load when editing XXX data."
+├── {project}-module-b/SKILL.md       → description: "Module B rules. Load when writing YYY feature."
+└── {project}-integration/SKILL.md    → description: "XXX integration. Load when connecting to YYY service."
 ```
 
-**拆分原则**：
+**Splitting Principles**:
 
-- 每个子 skill 对应一个**独立的功能模块或工作场景**
-- 子 skill 的 description 写清楚**这个模块是什么 + 什么时候加载**
-- 总览 skill 放项目级信息（背景、技术栈、仓库、功能清单），不堆具体细节
-- 坑点跟模块走，不单独建 "pitfalls" 文件——在对应模块 skill 内标注
+- Each sub-skill covers an **independent module or work scenario**
+- Sub-skill description states clearly **what the module is + when to load**
+- Overview skill holds project-level info (background, tech stack, repo, feature list), no granular details
+- Pitfalls stay with their module — don't create standalone "pitfalls" files
 
 ---
 
-## 清理流程
+## Cleanup Workflow
 
-当用户要求清理记忆，或记忆占用 > 80% 时：
+Trigger when user requests cleanup, or memory usage > 80%:
 
-### Step 1：逐条审查
+### Step 1: Per-Item Review
 
-对每条记忆问三个问题：
+Ask three questions for each memory entry:
 
-1. 这条是否每次会话都必须知道？→ **是** = LV1，留
-2. 这条是否只在特定场景下有用？→ **是** = LV2/LV3，转 skill
-3. 这条是否已过时/重复？→ **是** = 删
+1. Does this need to be known in every session? → **Yes** = LV1, keep
+2. Is this only useful in specific scenarios? → **Yes** = LV2/LV3, move to skill
+3. Is this outdated/duplicate? → **Yes** = delete
 
-### Step 2：列清单给用户确认
+### Step 2: List for User Confirmation
 
 ```
-**可删**：
-- #X 描述（原因）
+**Can delete**:
+- #X description (reason)
 
-**建议转 skill**：
-- #X 描述 → 建议转入 xxx skill
+**Suggest moving to skill**:
+- #X description → suggest moving to xxx skill
 
-**重复可合并**：
-- #X 和 #Y 内容重叠
+**Duplicates to merge**:
+- #X and #Y overlap
 ```
 
-**等用户确认后再操作**，不要自作主张。
+**Wait for user confirmation** before acting. Don't decide on your own.
 
-### Step 3：批量执行
+### Step 3: Batch Execute
 
-- 转 skill 的条目：先写入 skill，再用 memory(operations=[...]) 一次完成所有删除/替换（两步，不能漏）
-- 目标：LV1 记忆 usage < 50%，把空间留给真正必要的内容
+- Items moving to skill: write to skill first, then use memory(operations=[...]) to delete/replace in one batch (two steps, don't skip either)
+- Goal: LV1 memory usage < 50%, save space for what truly matters
 
 ---
 
-## 常见陷阱
+## Common Pitfalls
 
-1. **老条目文本匹配失败**：memory remove 的 old_text 必须是条目的**精确子串**。如果 remove 失败，用 memory(operations=[]) 的 current_entries 获取完整文本再重试。
+1. **Old entry text matching fails**: memory remove's old_text must be an **exact substring** of the entry. If remove fails, use memory(operations=[]) to get current_entries and retry with the full text.
 
-2. **不要在清理时误加条目**：想"看看记忆"不代表要 add 什么。用 system prompt 中的 MEMORY 段直接读，不要调 memory(action='add')。
+2. **Don't accidentally add entries during cleanup**: "Let me check the memory" doesn't mean you should add anything. Read the MEMORY section from the system prompt directly, don't call memory(action='add').
 
-3. **skill 创建后别忘删 memory**：转存是两步操作（写 skill + 删 memory），漏删 memory 等于没清理。
+3. **Don't forget to delete memory after creating skill**: Transfer is a two-step operation (write skill + delete memory). Missing the delete means it wasn't actually cleaned up.
 
-4. **批量操作是原子的**：operations 数组中任何一条失败，整批不执行。确保每条 old_text 都精确。
+4. **Batch operations are atomic**: If any entry in the operations array fails, the entire batch is rejected. Ensure every old_text is exact.
 
-5. **LV1 不要膨胀**：每次清理时审视 LV1 条目，问"这条真的每次都需要吗？"。LV1 越精简，每轮 token 花在刀刃上的比例越高。
+5. **Don't let LV1 bloat**: Review LV1 entries during every cleanup, ask "does this really need to be known every time?". The leaner LV1 is, the higher the proportion of tokens spent effectively per turn.
 
-6. **记忆和 skill 必须同步**：当用户修改一条偏好，这条信息可能同时存在于 memory 和某个 skill 的示例中。只改 memory 不改 skill = 下次加载 skill 时旧规则又回来了。改记忆时 grep 一下 skills 目录，确认没有残留引用。
+6. **Memory and skill must stay in sync**: When a user preference changes, it may exist in both memory and a skill example. Only changing memory without changing skill = the old rule comes back next time the skill loads. Grep the skills directory after editing memory to confirm no stale references.
 
-7. **不要用用户强制要求的条目当反例**：在 skill 文档中写"不该存"的示例时，确认该示例不是用户明确要求保留的 LV1 条目。否则 skill 和 memory 自相矛盾，agent 无所适从。
+7. **Don't use user-mandated entries as negative examples**: When writing "shouldn't store" examples in a skill doc, confirm the example isn't a LV1 entry the user explicitly requested. Otherwise skill and memory contradict each other and the agent can't reconcile them.
 
 ---
 
-## 自检清单
+## Self-Check Checklist
 
-执行完本 skill 后，对照检查：
+After executing this skill, verify:
 
-- [ ] LV1 条目是否都在 memory（target='memory' 或 'user'）中，没有遗漏
-- [ ] LV1 每条都是"每次会话必须知道"的，没有混入按需内容
-- [ ] memory 中没有项目细节、工具 pitfall、操作流程（这些应是 skill）
-- [ ] memory 和 skill 内容一致，没有改了一边忘了另一边
-- [ ] LV2/LV3 skill 的 description 都写清楚了触发条件
-- [ ] 项目 skill 按文件夹结构组织，子模块独立、坑点跟模块走
-- [ ] skills_list 中没有功能重叠的 skill
+- [ ] All LV1 entries are in memory (target='memory' or 'user'), nothing missing
+- [ ] Every LV1 entry is "must know every session", no on-demand content mixed in
+- [ ] Memory has no project details, tool pitfalls, or procedures (those should be skills)
+- [ ] Memory and skill content are consistent, no one-side-only updates
+- [ ] All LV2/LV3 skill descriptions have clear trigger conditions
+- [ ] Project skills follow folder structure, sub-modules independent, pitfalls with modules
+- [ ] No functionally overlapping skills in skills_list
 
-发现问题直接修，不用等用户要求。
+Fix issues immediately, don't wait for the user to ask.
