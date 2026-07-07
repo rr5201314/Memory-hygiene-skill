@@ -108,16 +108,16 @@ skills/{category}/
 
 ```bash
 # 克隆仓库
-git clone https://github.com/YOUR_USERNAME/memory-hygiene.git
+git clone https://github.com/rr5201314/Memory-hygiene-skill.git
 
 # 复制到 Hermes skills 目录
-cp memory-hygiene/SKILL.md ~/.hermes/skills/hermes-agent/memory-hygiene/SKILL.md
+cp Memory-hygiene-skill/SKILL.md ~/.hermes/skills/hermes-agent/memory-hygiene/SKILL.md
 ```
 
 或通过 Hermes CLI：
 
 ```bash
-hermes skills install https://github.com/YOUR_USERNAME/memory-hygiene
+hermes skills install https://github.com/rr5201314/Memory-hygiene-skill
 ```
 
 ## 首次加载
